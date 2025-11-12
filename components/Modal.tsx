@@ -11,9 +11,10 @@ interface ModalProps {
   tableName?: string;
   referenceData?: DataRow[];
   referenceColumn?: string;
+  dropdownOptions?: { [key: string]: string[] };
 }
 
-const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, headers, initialData, tableName, referenceData = [], referenceColumn = '건물명' }) => {
+const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, headers, initialData, tableName, referenceData = [], referenceColumn = '건물명', dropdownOptions = {} }) => {
   const [formData, setFormData] = useState<DataRow>({});
   const [validationError, setValidationError] = useState('');
   const [autocompleteOpen, setAutocompleteOpen] = useState<string | null>(null);
@@ -85,15 +86,15 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, headers, initial
     <div className="fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50 p-4" onClick={onClose}>
       <div className="bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl transform transition-all" onClick={e => e.stopPropagation()}>
         <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 border-b border-purple-700 flex justify-between items-center" style={{
-            backgroundColor: '#7C3AED80'
+          <div className="px-6 py-4 border-b border-green-700 flex justify-between items-center" style={{
+            backgroundColor: '#10B98180'
           }}>
             <h3 className="text-xl font-semibold text-white">{initialData ? `${tableName} 수정` : `${tableName} 추가`}</h3>
             <button type="button" onClick={onClose} className="text-gray-200 hover:text-white">
                 <Icon name="close" className="w-5 h-5" />
             </button>
           </div>
-          <div className="p-6 max-h-[60vh] overflow-y-auto">
+          <div className="p-6 max-h-[60vh] overflow-y-auto" style={{ backgroundColor: '#10B98110' }}>
             {validationError && (
               <div className="p-3 bg-red-900/30 border border-red-700 rounded-lg text-sm text-red-300 mb-4 col-span-2">
                 {validationError}
@@ -103,28 +104,63 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, onSave, headers, initial
             {headers.map(header => (
               <div key={header} className="relative">
                 <label htmlFor={header} className="block mb-2 text-sm font-medium text-gray-300 capitalize">{header}</label>
-                <input
-                  type="text"
-                  id={header}
-                  name={header}
-                  value={formData[header] || ''}
-                  onChange={(e) => handleChange(header, e.target.value)}
-                  className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5"
-                  required
-                  autoComplete="off"
-                />
-                {header === referenceColumn && autocompleteOpen === header && filteredSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
-                    {filteredSuggestions.map((suggestion, index) => (
-                      <div
-                        key={index}
-                        onClick={() => handleSelectSuggestion(header, suggestion)}
-                        className="px-3 py-2 text-white text-sm hover:bg-indigo-600 cursor-pointer transition-colors"
-                      >
-                        {suggestion}
-                      </div>
+                {dropdownOptions[header] ? (
+                  <select
+                    id={header}
+                    name={header}
+                    value={formData[header] || ''}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, [header]: e.target.value }));
+                      setValidationError('');
+                    }}
+                    className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5"
+                  >
+                    <option value="">선택하세요</option>
+                    {dropdownOptions[header].map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
                     ))}
-                  </div>
+                  </select>
+                ) : header.toLowerCase().includes('메모') ? (
+                  <textarea
+                    id={header}
+                    name={header}
+                    value={formData[header] || ''}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, [header]: e.target.value }));
+                      setValidationError('');
+                    }}
+                    className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5"
+                    rows={4}
+                    autoComplete="off"
+                  />
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      id={header}
+                      name={header}
+                      value={formData[header] || ''}
+                      onChange={(e) => handleChange(header, e.target.value)}
+                      className="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5"
+                      required
+                      autoComplete="off"
+                    />
+                    {header === referenceColumn && autocompleteOpen === header && filteredSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 mt-1 bg-gray-700 border border-gray-600 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                        {filteredSuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            onClick={() => handleSelectSuggestion(header, suggestion)}
+                            className="px-3 py-2 text-white text-sm hover:bg-indigo-600 cursor-pointer transition-colors"
+                          >
+                            {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             ))}

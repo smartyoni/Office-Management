@@ -38,6 +38,59 @@ export const TableManager: React.FC = () => {
   const [nextZIndex, setNextZIndex] = useState(100);
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Filter state
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [contractFilter, setContractFilter] = useState<string | null>(null);
+
+  // Helper function to parse dates
+  const parseDate = (dateStr: string): Date | null => {
+    if (!dateStr) return null;
+    const formats = [
+      /^(\d{4})-(\d{2})-(\d{2})$/,
+      /^(\d{4})\/(\d{2})\/(\d{2})$/,
+      /^(\d{4})(\d{2})(\d{2})$/,
+    ];
+    for (const format of formats) {
+      const match = dateStr.trim().match(format);
+      if (match) {
+        const [, year, month, day] = match;
+        return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      }
+    }
+    return null;
+  };
+
+  // Filter function for contract table
+  const applyContractFilter = (data: DataRow[], filter: string | null): DataRow[] => {
+    if (!filter) return data;
+
+    const today = new Date();
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+
+    return data.filter(row => {
+      if (filter === 'monthly_contract') {
+        const contractDate = row['계약서작성일'];
+        if (!contractDate) return false;
+        const date = parseDate(contractDate);
+        return date && date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
+      } else if (filter === 'monthly_payment') {
+        const paymentDate = row['잔금일'];
+        if (!paymentDate) return false;
+        const date = parseDate(paymentDate);
+        return date && date.getMonth() + 1 === currentMonth && date.getFullYear() === currentYear;
+      } else if (filter === 'scheduled_contract') {
+        const contractDate = row['계약서작성일'];
+        if (!contractDate) return false;
+        const date = parseDate(contractDate);
+        if (!date) return false;
+        const nextMonth = new Date(currentYear, currentMonth, 1);
+        return date > nextMonth;
+      }
+      return true;
+    });
+  };
+
   // CSV parsing logic (moved from App.tsx)
   const parseCSV = (csvText: string) => {
     try {
@@ -151,6 +204,18 @@ export const TableManager: React.FC = () => {
     }
   };
 
+  const handleSaveInlineEdit = async (rowData: DataRow) => {
+    if (appState.data) {
+      const updatedData = appState.data.map((row, index) => {
+        return Object.keys(openModals).some(id => {
+          const modal = openModals.find(m => m.id === id);
+          return modal && modal.rowIndex === index;
+        }) ? rowData : row;
+      });
+      await appState.setData(updatedData);
+    }
+  };
+
   const handleSave = async (rowData: DataRow) => {
     if (appState.data) {
       // Validate that the row is not completely empty
@@ -252,6 +317,27 @@ export const TableManager: React.FC = () => {
 
   const editingRow = editingRowIndex !== null && appState.data ? appState.data[editingRowIndex] : null;
 
+  // 필터링된 데이터
+  const getActiveTableName = () => appState.tables.find(t => t.id === appState.activeTableId)?.name;
+
+  const filteredData = (() => {
+    if (!appState.data) return appState.data;
+
+    const activeTableName = getActiveTableName();
+
+    // 건물정보 테이블: 유형 필터 적용
+    if (activeTableName === '건물정보' && typeFilter) {
+      return appState.data.filter(row => row['유형'] === typeFilter);
+    }
+
+    // 계약호실 테이블: 계약 필터 적용
+    if (activeTableName === '계약호실' && contractFilter) {
+      return applyContractFilter(appState.data, contractFilter);
+    }
+
+    return appState.data;
+  })();
+
   if (appState.isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
@@ -280,7 +366,13 @@ export const TableManager: React.FC = () => {
       {/* Main Content with Sidebar */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', width: '100%' }}>
         {/* Filter Sidebar */}
-        <FilterSidebar />
+        <FilterSidebar onFilterChange={(filter, filterType) => {
+          if (filterType === 'geonmul') {
+            setTypeFilter(filter);
+          } else if (filterType === 'geyak') {
+            setContractFilter(filter);
+          }
+        }} />
 
         {/* Data Table Area */}
         <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
@@ -320,7 +412,7 @@ export const TableManager: React.FC = () => {
           // Table exists with data - show data table
           <DataTable
             headers={appState.headers}
-            data={appState.data}
+            data={filteredData}
             onAdd={handleAdd}
             onEdit={handleEdit}
             onDelete={handleDelete}
@@ -363,6 +455,10 @@ export const TableManager: React.FC = () => {
             tableName={appState.tables.find(t => t.id === appState.activeTableId)?.name}
             referenceData={appState.activeTableId !== appState.tables.find(t => t.name === '건물정보')?.id ? appState.data : []}
             referenceColumn="건물명"
+            dropdownOptions={appState.tables.find(t => t.id === appState.activeTableId)?.name === '건물정보' ? {
+              '위치': ['향교', '나루', '마곡', '발산', '신방화', '공항'],
+              '유형': ['오피스텔', '상업용', '아파트', '지산', '기타']
+            } : {}}
           />
 
           {openModals.map(modal => (
@@ -375,12 +471,17 @@ export const TableManager: React.FC = () => {
                 handleEdit(modal.rowIndex);
                 handleCloseDetailModal(modal.id);
               }}
+              onSaveInlineEdit={handleSaveInlineEdit}
               onBringToFront={() => handleBringToFront(modal.id)}
               onUpdatePosition={(position) => handleUpdateModalPosition(modal.id, position)}
               data={modal.data}
               headers={appState.headers}
               position={modal.position}
               zIndex={modal.zIndex}
+              dropdownOptions={appState.tables.find(t => t.id === appState.activeTableId)?.name === '건물정보' ? {
+                '위치': ['향교', '나루', '마곡', '발산', '신방화', '공항'],
+                '유형': ['오피스텔', '상업용', '아파트', '지산', '기타']
+              } : {}}
             />
           ))}
         </>
